@@ -1,5 +1,6 @@
 package de.athalis.example;
 
+
 import org.semanticweb.owlapi.apibinding.OWLManager;
 
 import org.semanticweb.owlapi.io.OWLParserFactory;
@@ -7,6 +8,8 @@ import org.semanticweb.owlapi.model.OWLOntology;
 import org.semanticweb.owlapi.model.OWLOntologyCreationException;
 import org.semanticweb.owlapi.model.OWLOntologyManager;
 import org.semanticweb.owlapi.util.PriorityCollection;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URL;
@@ -15,17 +18,19 @@ import java.util.List;
 import java.util.concurrent.*;
 
 public class Main {
-    private static final URL ontologyFile = Main.class.getClassLoader().getResource("standard_PASS_ont_v_1.0.0.owl");
+    private static final URL ontologyFile = Main.class.getClassLoader().getResource("empty.owl");
 
-    public static void main(String[] args) throws InterruptedException, ExecutionException {
+    public static void main(String[] args) throws InterruptedException {
         assert ontologyFile != null;
+        
+        final Logger logger = LoggerFactory.getLogger(Main.class);
 
-        System.out.println("Starting...");
+        logger.info("Starting...");
 
         final int parallelism = Runtime.getRuntime().availableProcessors() * 4;
         ExecutorService execService = Executors.newFixedThreadPool(parallelism);
 
-        System.out.println("ThreadPool("+parallelism+") created");
+        logger.debug("ThreadPool("+parallelism+") created");
 
         final int numReader = parallelism * 16;
         List<Callable<OWLOntology>> tasks = new ArrayList<>(numReader);
@@ -34,43 +39,41 @@ public class Main {
             tasks.add(new ReadTask());
         }
 
-        System.out.println(numReader + " Readers prepared");
+        logger.debug(numReader + " Readers prepared");
 
         execService.invokeAll(tasks);
 
-        System.out.println(numReader + " Readers submitted, awaiting completion within 5 minutes...");
+        logger.info(numReader + " Readers submitted, awaiting completion within 5 minutes...");
 
         execService.shutdown();
         boolean terminated = execService.awaitTermination(5, TimeUnit.MINUTES);
 
-        System.out.println("execService terminated: " + terminated);
+        logger.info("execService terminated: " + terminated);
     }
 
     private static class ReadTask implements Callable<OWLOntology> {
 
         @Override
         public OWLOntology call() {
-            System.out.println(Thread.currentThread() + ": called...");
+            final Logger logger = LoggerFactory.getLogger(ReadTask.class);
+            
+            logger.info("starting...");
             final OWLOntologyManager manager = OWLManager.createConcurrentOWLOntologyManager();
 
             PriorityCollection<OWLParserFactory> parsers = manager.getOntologyParsers();
-            System.out.println(Thread.currentThread() + ": parsers: " + parsers.size() + " (pre)");
+            logger.info("number of parsers: " + parsers.size() + " (pre)");
+
+            if (parsers.size() < 19) {
+                logger.warn("expecting failure...");
+            }
 
             final OWLOntology ont;
             try {
                 ont = manager.loadOntologyFromOntologyDocument(ontologyFile.openStream());
-                System.out.println(Thread.currentThread() + ": done.");
+                logger.debug("done.");
                 return ont;
-            } catch (OWLOntologyCreationException e) {
-                System.err.println(Thread.currentThread() + ": OWLOntologyCreationException!");
-
-                PriorityCollection<OWLParserFactory> parsers2 = manager.getOntologyParsers();
-                System.err.println(Thread.currentThread() + ": parsers: " + parsers2.size() + " (post)");
-
-                //e.printStackTrace();
-            } catch (IOException e) {
-                System.err.println(Thread.currentThread() + ": IOException!");
-                //e.printStackTrace();
+            } catch (OWLOntologyCreationException | IOException e) {
+                logger.error("loadOntologyFromOntologyDocument failed", e);
             }
             return null;
         }
