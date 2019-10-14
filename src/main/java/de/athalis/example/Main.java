@@ -27,23 +27,23 @@ public class Main {
 
         logger.info("Starting...");
 
-        final int parallelism = Runtime.getRuntime().availableProcessors() * 4;
+        final int parallelism = Runtime.getRuntime().availableProcessors() * 4 * 2;
         ExecutorService execService = Executors.newFixedThreadPool(parallelism);
 
         logger.debug("ThreadPool("+parallelism+") created");
 
-        final int numReader = parallelism * 16;
+        final int numReader = parallelism * 16 * 2;
         List<Callable<OWLOntology>> tasks = new ArrayList<>(numReader);
 
         for (int i = 0; i < numReader; i++) {
             tasks.add(new ReadTask());
         }
 
-        logger.debug(numReader + " Readers prepared");
+        logger.debug(numReader + " Readers prepared, invoke them...");
 
         execService.invokeAll(tasks);
 
-        logger.info(numReader + " Readers submitted, awaiting completion within 5 minutes...");
+        logger.info(numReader + " Readers invoked.");
 
         execService.shutdown();
         boolean terminated = execService.awaitTermination(5, TimeUnit.MINUTES);
